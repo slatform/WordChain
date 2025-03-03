@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Word Chain Game</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            text-align: center;
+        }
+        .game-container {
+            margin-top: 20px;
+        }
+        #current-word {
+            font-size: 28px;
+            font-weight: bold;
+            margin: 20px 0;
+            min-height: 42px;
+        }
+        #word-input {
+            padding: 10px;
+            font-size: 16px;
+            width: 60%;
+            margin-right: 10px;
+        }
+        button {
+            padding: 10px 15px;
+            font-size: 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button.danger {
+            background-color: #d32f2f;
+        }
+        button.danger:hover {
+            background-color: #b71c1c;
+        }
+        #word-list {
+            margin-top: 20px;
+            text-align: left;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+        }
+        #score {
+            font-size: 20px;
+            margin: 20px 0;
+        }
+        #timer {
+            font-size: 18px;
+            margin-bottom: 20px;
+        }
+        .used-word {
+            color: #d32f2f;
+            font-style: italic;
+        }
+        .error {
+            color: red;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        #modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.7);
+            z-index: 10;
+        }
+        #modal-content {
+            background-color: white;
+            margin: 15% auto;
+            padding: 20px;
+            width: 70%;
+            max-width: 500px;
+            border-radius: 5px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>Word Chain Game</h1>
+    <p>Form a new word starting with the last letter of the previous word.</p>
+    
+    <div class="game-container">
+        <div id="timer">Time: 60s</div>
+        <div id="score">Score: 0</div>
+        <div id="current-word">Press Start to begin!</div>
+        
+        <input type="text" id="word-input" placeholder="Enter your word" disabled>
+        <button id="submit-btn" disabled>Submit</button>
+        <button id="start-btn">Start Game</button>
+        
+        <div id="message" class="error"></div>
+        
+        <h3>Word History:</h3>
+        <div id="word-list"></div>
+    </div>
+
+    <div id="modal">
+        <div id="modal-content">
+            <h2 id="modal-title">Invalid Word!</h2>
+            <p id="modal-message"></p>
+            <button id="continue-btn">Continue Playing (-10 points)</button>
+            <button id="end-btn" class="danger">Game Over</button>
+        </div>
+    </div>
+
+    <script>
+        const startWords = ["apple", "blue", "cat", "dog", "elephant", "fox", "green", "happy"];
+        const wordInput = document.getElementById("word-input");
+        const submitBtn = document.getElementById("submit-btn");
+        const startBtn = document.getElementById("start-btn");
+        const currentWordDisplay = document.getElementById("current-word");
+        const wordListDisplay = document.getElementById("word-list");
+        const scoreDisplay = document.getElementById("score");
+        const timerDisplay = document.getElementById("timer");
+        const messageDisplay = document.getElementById("message");
+        const modal = document.getElementById("modal");
+        const modalMessage = document.getElementById("modal-message");
+        const continueBtn = document.getElementById("continue-btn");
+        const endBtn = document.getElementById("end-btn");
+        
+        let currentWord = "";
+        let usedWords = [];
+        let score = 0;
+        let timeLeft = 60;
+        let timerInterval;
+        let mistakes = 0;
+        
+        startBtn.addEventListener("click", startGame);
+        submitBtn.addEventListener("click", checkWord);
+        continueBtn.addEventListener("click", continueGame);
+        endBtn.addEventListener("click", endGameByChoice);
+        
+        wordInput.addEventListener("keyup", function(event) {
+            if (event.key === "Enter") {
+                checkWord();
+            }
+        });
+        
+        function startGame() {
+            // Reset game state
+            usedWords = [];
+            score = 0;
+            timeLeft = 60;
+            mistakes = 0;
+            messageDisplay.textContent = "";
+            wordListDisplay.innerHTML = "";
+            
+            // Pick a random starting word
+            currentWord = startWords[Math.floor(Math.random() * startWords.length)];
+            currentWordDisplay.textContent = currentWord;
+            usedWords.push(currentWord);
+            updateWordList();
+            
+            // Update UI
+            scoreDisplay.textContent = "Score: 0";
+            wordInput.disabled = false;
+            submitBtn.disabled = false;
+            startBtn.disabled = true;
+            wordInput.value = "";
+            wordInput.focus();
+            
+            // Start timer
+            timerInterval = setInterval(updateTimer, 1000);
+        }
+        
+        function updateTimer() {
+            timeLeft--;
+            timerDisplay.textContent = `Time: ${timeLeft}s`;
+            
+            if (timeLeft <= 0) {
+                endGame("Time's up!");
+            }
+        }
+        
+        function checkWord() {
+            const newWord = wordInput.value.trim().toLowerCase();
+            
+            if (newWord.length < 2) {
+                showInvalidWordModal("Word must be at least 2 letters long.");
+                return;
+            }
+            
+            if (usedWords.includes(newWord)) {
+                showInvalidWordModal("Word already used!");
+                return;
+            }
+            
+            const lastChar = currentWord.charAt(currentWord.length - 1);
+            
+            if (newWord.charAt(0) !== lastChar) {
+                showInvalidWordModal(`Word must start with the letter '${lastChar}'!`);
+                return;
+            }
+            
+            // If we get here, word is valid
+            currentWord = newWord;
+            usedWords.push(newWord);
+            currentWordDisplay.textContent = currentWord;
+            
+            // Award points based on word length
+            const points = newWord.length;
+            score += points;
+            scoreDisplay.textContent = `Score: ${score}`;
+            
+            // Clear input and message
+            wordInput.value = "";
+            messageDisplay.textContent = "";
+            
+            // Add 5 seconds to the timer for each word
+            timeLeft += 5;
+            timerDisplay.textContent = `Time: ${timeLeft}s`;
+            
+            updateWordList();
+            wordInput.focus();
+        }
+        
+        function showInvalidWordModal(message) {
+            modalMessage.textContent = message;
+            modal.style.display = "block";
+            mistakes++;
+            
+            // If too many mistakes, change the continue button text
+            if (mistakes >= 3) {
+                continueBtn.textContent = `Continue Playing (-${mistakes*5} points)`;
+            } else {
+                continueBtn.textContent = "Continue Playing (-10 points)";
+            }
+        }
+        
+        function continueGame() {
+            // Penalize the player for the invalid word
+            const penalty = Math.min(10 + (mistakes * 5), 25);
+            score = Math.max(0, score - penalty);
+            scoreDisplay.textContent = `Score: ${score}`;
+            
+            // Close the modal and clear the input
+            modal.style.display = "none";
+            wordInput.value = "";
+            messageDisplay.textContent = `Penalty: -${penalty} points`;
+            wordInput.focus();
+        }
+        
+        function endGameByChoice() {
+            endGame("Game over by player choice.");
+        }
+        
+        function updateWordList() {
+            wordListDisplay.innerHTML = usedWords.map(word => `<div>${word}</div>`).join("");
+        }
+        
+        function endGame(message) {
+            clearInterval(timerInterval);
+            wordInput.disabled = true;
+            submitBtn.disabled = true;
+            startBtn.disabled = false;
+            messageDisplay.textContent = `${message} Final score: ${score}`;
+            modal.style.display = "none";
+        }
+    </script>
+</body>
+</html>

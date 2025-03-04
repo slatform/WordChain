@@ -122,6 +122,11 @@
             color: #6af;
             text-shadow: 0 0 10px #2af;
         }
+        #validating {
+            display: none;
+            margin: 10px 0;
+            color: #4af;
+        }
     </style>
 </head>
 <body>
@@ -129,14 +134,15 @@
     <p>Form a new word starting with the last letter of the previous word.</p>
     
     <div class="game-container">
-        <div id="timer">Time: 60s</div>
+        <div id="timer">Time: 30s</div>
         <div id="score">Score: 0</div>
-        <div id="current-word">Press Start to begin!</div>
+        <div id="current-word">Start typing to begin!</div>
         
-        <input type="text" id="word-input" placeholder="Enter your word" disabled>
-        <button id="submit-btn" disabled>Submit</button>
-        <button id="start-btn">Start Game</button>
+        <input type="text" id="word-input" placeholder="Enter your word">
+        <button id="submit-btn">Submit</button>
+        <button id="reset-btn">Reset Game</button>
         
+        <div id="validating">Validating word...</div>
         <div id="message" class="error"></div>
         
         <h3>Word History:</h3>
@@ -147,7 +153,6 @@
         <div id="modal-content">
             <h2 id="modal-title">Invalid Word!</h2>
             <p id="modal-message"></p>
-            <button id="continue-btn">Continue Playing (-10 points)</button>
             <button id="end-btn" class="danger">Game Over</button>
         </div>
     </div>
@@ -157,30 +162,37 @@
         const alphabet = "abcdefghijklmnopqrstuvwxyz";
         const wordInput = document.getElementById("word-input");
         const submitBtn = document.getElementById("submit-btn");
-        const startBtn = document.getElementById("start-btn");
+        const resetBtn = document.getElementById("reset-btn");
         const currentWordDisplay = document.getElementById("current-word");
         const wordListDisplay = document.getElementById("word-list");
         const scoreDisplay = document.getElementById("score");
         const timerDisplay = document.getElementById("timer");
         const messageDisplay = document.getElementById("message");
+        const validatingDisplay = document.getElementById("validating");
         const modal = document.getElementById("modal");
         const modalMessage = document.getElementById("modal-message");
-        const continueBtn = document.getElementById("continue-btn");
         const endBtn = document.getElementById("end-btn");
         
         let currentWord = "";
         let usedWords = [];
         let score = 0;
-        let timeLeft = 60;
+        let timeLeft = 30; // Changed from 60 to 30
         let timerInterval;
         let floatingLetters = [];
         let animationFrameId;
-        let mistakes = 0;
+        let gameActive = false;
         
-        startBtn.addEventListener("click", startGame);
+        // Replace the start button with reset button
+        resetBtn.addEventListener("click", resetGame);
         submitBtn.addEventListener("click", checkWord);
-        continueBtn.addEventListener("click", continueGame);
         endBtn.addEventListener("click", endGameByChoice);
+        
+        // Start game when user first types
+        wordInput.addEventListener("input", function(event) {
+            if (!gameActive) {
+                startGame();
+            }
+        });
         
         wordInput.addEventListener("keyup", function(event) {
             if (event.key === "Enter") {
@@ -189,11 +201,15 @@
         });
         
         function startGame() {
+            // Only start if not already active
+            if (gameActive) return;
+            
+            gameActive = true;
+            
             // Reset game state
             usedWords = [];
             score = 0;
-            timeLeft = 60;
-            mistakes = 0;
+            timeLeft = 30; // Changed from 60 to 30
             messageDisplay.textContent = "";
             wordListDisplay.innerHTML = "";
             
@@ -205,17 +221,34 @@
             
             // Update UI
             scoreDisplay.textContent = "Score: 0";
-            wordInput.disabled = false;
             submitBtn.disabled = false;
-            startBtn.disabled = true;
-            wordInput.value = "";
-            wordInput.focus();
             
             // Start timer
             timerInterval = setInterval(updateTimer, 1000);
             
             // Start floating letters
             startFloatingLetters();
+        }
+        
+        function resetGame() {
+            // End current game if active
+            if (gameActive) {
+                endGame("Game reset.");
+            }
+            
+            // Clear UI
+            wordInput.value = "";
+            currentWordDisplay.textContent = "Start typing to begin!";
+            scoreDisplay.textContent = "Score: 0";
+            timerDisplay.textContent = "Time: 30s";
+            messageDisplay.textContent = "";
+            wordListDisplay.innerHTML = "";
+            
+            // Reset state
+            gameActive = false;
+            usedWords = [];
+            score = 0;
+            timeLeft = 30;
         }
         
         function startFloatingLetters() {
@@ -316,6 +349,11 @@
         }
         
         function checkWord() {
+            if (!gameActive) {
+                startGame();
+                return;
+            }
+            
             const newWord = wordInput.value.trim().toLowerCase();
             
             if (newWord.length < 2) {
@@ -335,6 +373,37 @@
                 return;
             }
             
+            // Disable input while validating
+            wordInput.disabled = true;
+            submitBtn.disabled = true;
+            validatingDisplay.style.display = "block";
+            
+            // Check if it's a real word using a dictionary API
+            fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${newWord}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Not a real word');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Word is valid
+                    processValidWord(newWord);
+                })
+                .catch(error => {
+                    // Word is not valid
+                    showInvalidWordModal("Not a real English word!");
+                })
+                .finally(() => {
+                    // Re-enable input
+                    wordInput.disabled = false;
+                    submitBtn.disabled = false;
+                    validatingDisplay.style.display = "none";
+                    wordInput.focus();
+                });
+        }
+        
+        function processValidWord(newWord) {
             // If we get here, word is valid
             currentWord = newWord;
             usedWords.push(newWord);
@@ -354,33 +423,11 @@
             timerDisplay.textContent = `Time: ${timeLeft}s`;
             
             updateWordList();
-            wordInput.focus();
         }
         
         function showInvalidWordModal(message) {
             modalMessage.textContent = message;
             modal.style.display = "block";
-            mistakes++;
-            
-            // If too many mistakes, change the continue button text
-            if (mistakes >= 3) {
-                continueBtn.textContent = `Continue Playing (-${mistakes*5} points)`;
-            } else {
-                continueBtn.textContent = "Continue Playing (-10 points)";
-            }
-        }
-        
-        function continueGame() {
-            // Penalize the player for the invalid word
-            const penalty = Math.min(10 + (mistakes * 5), 25);
-            score = Math.max(0, score - penalty);
-            scoreDisplay.textContent = `Score: ${score}`;
-            
-            // Close the modal and clear the input
-            modal.style.display = "none";
-            wordInput.value = "";
-            messageDisplay.textContent = `Penalty: -${penalty} points`;
-            wordInput.focus();
         }
         
         function endGameByChoice() {
@@ -394,9 +441,9 @@
         function endGame(message) {
             clearInterval(timerInterval);
             stopFloatingLetters();
-            wordInput.disabled = true;
-            submitBtn.disabled = true;
-            startBtn.disabled = false;
+            wordInput.disabled = false;
+            submitBtn.disabled = false;
+            gameActive = false;
             messageDisplay.textContent = `${message} Final score: ${score}`;
             modal.style.display = "none";
         }
